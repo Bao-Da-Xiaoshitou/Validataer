@@ -66,7 +66,7 @@ def get_data():
         'data': df_slice.fillna("").to_dict(orient='records')
     })
 
-# DLP规则管理API
+
 @app.route('/rules', methods=['GET'])
 def get_rules():
     """获取所有DLP规则"""
