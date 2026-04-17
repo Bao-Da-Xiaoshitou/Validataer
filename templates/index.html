@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CSV 在线查看器</title>
+    <link rel="stylesheet" href="./static/css/style.css">
+    <script src="./static/js/app.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <h1>CSV 在线查看器</h1>
+
+    <div class="upload-section">
+        <div class="drop-area" id="dropArea">
+            <p>拖入CSV文件到此处，或</p>
+            <input type="file" id="fileInput" class="file-input">
+            <button onclick="uploadFile()">选择文件上传</button>
+        </div>
+    </div>
+
+    <div class="data-info">
+        <div class="left-actions">
+            <button onclick="resetUpload()" class="reupload-btn">重新上传</button>
+            <button onclick="scanData()" class="scan-btn">DLP扫描</button>
+            <button onclick="validateData()" class="validate-btn">数据验证</button>
+            <button onclick="validateRelationships()" class="relationship-btn">关系校验</button>
+            <button onclick="openRelationshipValidationModal()" class="custom-relationship-btn">自定义关系验证</button>
+            <button onclick="validateColumn()" class="validate-column-btn">自定义验证</button>
+            <button onclick="processCsv()" class="process-btn">智能处理</button>
+            <button onclick="processCsvQuick()" class="process-quick-btn">快速清洗</button>
+            <a href="/rules_page" class="rules-link">规则管理</a>
+            <a href="/relationship_rules_page" class="rules-link">关系规则管理</a>
+        </div>
+        <span id="dataStats">共 0 行 / 0 列</span>
+    </div>
+
+    <!-- DLP扫描结果 -->
+    <div class="scan-results" id="scanResults" style="display: none;">
+        <div class="scan-content">
+            <div class="scan-header">
+                <h3>DLP扫描结果</h3>
+                <button onclick="closeScanResults()" class="close-btn">关闭</button>
+            </div>
+            <div class="scan-summary" id="scanSummary"></div>
+            <div class="violations-table-container">
+                <table id="violationsTable">
+                    <thead>
+                        <tr>
+                            <th>行号</th>
+                            <th>列名</th>
+                            <th>值</th>
+                            <th>规则</th>
+                            <th>严重程度</th>
+                        </tr>
+                    </thead>
+                    <tbody id="violationsTableBody"></tbody>
+                </table>
+            </div>
+            <div class="pagination" id="violationsPagination"></div>
+        </div>
+    </div>
+
+    <!-- 数据验证结果 -->
+    <div class="validation-results" id="validationResults" style="display: none;">
+        <div class="validation-content">
+            <div class="validation-header">
+                <h3>数据验证结果</h3>
+                <button onclick="closeValidationResults()" class="close-btn">关闭</button>
+            </div>
+            <div class="validation-summary" id="validationSummary"></div>
+            <div class="invalid-data-table-container">
+                <table id="invalidDataTable">
+                    <thead>
+                        <tr>
+                            <th>行号</th>
+                            <th>列名</th>
+                            <th>值</th>
+                            <th>验证规则</th>
+                            <th>严重程度</th>
+                            <th>期望格式</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invalidDataTableBody"></tbody>
+                </table>
+            </div>
+            <div class="pagination" id="validationPagination"></div>
+        </div>
+    </div>
+
+    <!-- 自定义验证对话框 -->
+    <div class="modal" id="customValidationModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>自定义列验证</h3>
+                <button onclick="closeCustomValidation()" class="close-btn">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="columnSelect">选择列：</label>
+                    <select id="columnSelect"></select>
+                </div>
+                <div class="form-group">
+                    <label for="regexPattern">正则表达式：</label>
+                    <input type="text" id="regexPattern" placeholder="输入正则表达式，例如：^\d{11}$">
+                </div>
+                <div class="form-group">
+                    <button onclick="runCustomValidation()" class="validate-btn">开始验证</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 自定义关系验证对话框 -->
+    <div class="modal" id="relationshipValidationModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>自定义关系验证</h3>
+                <button onclick="closeRelationshipValidationModal()" class="close-btn">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="ruleId">规则ID：</label>
+                    <input type="text" id="ruleId" placeholder="输入规则ID，例如：custom_rule_1">
+                </div>
+                <div class="form-group">
+                    <label for="ruleName">规则名称：</label>
+                    <input type="text" id="ruleName" placeholder="输入规则名称，例如：日期关系验证">
+                </div>
+                <div class="form-group">
+                    <label for="ruleDescription">规则描述：</label>
+                    <input type="text" id="ruleDescription" placeholder="输入规则描述">
+                </div>
+                <div class="form-group">
+                    <label for="primaryKey">主键列：</label>
+                    <select id="primaryKey"></select>
+                </div>
+                <div class="form-group">
+                    <label for="validationType">验证类型：</label>
+                    <select id="validationType" onchange="updateRelatedColumnsUI()">
+                        <option value="date_comparison">日期比较</option>
+                        <option value="numeric_comparison">数值比较</option>
+                        <option value="custom">自定义验证</option>
+                        <option value="id_card">身份证验证</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>关联列配置：</label>
+                    <div id="relatedColumnsContainer">
+                        <!-- 动态添加关联列 -->
+                    </div>
+                    <button onclick="addRelatedColumn()" class="add-column-btn">添加关联列</button>
+                </div>
+                <div class="form-group">
+                    <label for="severity">严重程度：</label>
+                    <select id="severity">
+                        <option value="high">高危</option>
+                        <option value="medium">中危</option>
+                        <option value="low">低危</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <button onclick="saveRelationshipRule()" class="validate-btn">保存规则</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 自定义验证结果 -->
+    <div class="validation-results" id="customValidationResults" style="display: none;">
+        <div class="validation-content">
+            <div class="validation-header">
+                <h3>自定义验证结果</h3>
+                <button onclick="closeCustomValidationResults()" class="close-btn">关闭</button>
+            </div>
+            <div class="validation-summary" id="customValidationSummary"></div>
+            <div class="invalid-data-table-container">
+                <table id="customInvalidDataTable">
+                    <thead>
+                        <tr>
+                            <th>行号</th>
+                            <th>列名</th>
+                            <th>值</th>
+                            <th>期望格式</th>
+                        </tr>
+                    </thead>
+                    <tbody id="customInvalidDataTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 关系验证结果 -->
+    <div class="validation-results" id="relationshipResults" style="display: none;">
+        <div class="validation-content">
+            <div class="validation-header">
+                <h3>关系验证结果</h3>
+                <button onclick="closeRelationshipResults()" class="close-btn">关闭</button>
+            </div>
+            <div class="validation-summary" id="relationshipSummary"></div>
+            <div class="invalid-data-table-container">
+                <table id="relationshipTable">
+                    <thead>
+                        <tr>
+                            <th>行号</th>
+                            <th>列名</th>
+                            <th>当前值</th>
+                            <th>期望值</th>
+                            <th>验证规则</th>
+                            <th>严重程度</th>
+                            <th>描述</th>
+                        </tr>
+                    </thead>
+                    <tbody id="relationshipTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 表格 -->
+    <div class="table-container">
+        <table id="dataTable">
+            <thead></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- 分页控件 -->
+    <div class="pagination">
+        <div class="page-size">
+            每页显示：
+            <select id="pageSize" onchange="loadData()">
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+            </select>
+        </div>
+        <div class="page-info">
+            显示第 <span id="startRow">1</span>-<span id="endRow">50</span> 行，共 <span id="totalRows">0</span> 行
+        </div>
+        <div class="page-controls">
+            <button onclick="prevPage()" id="prevBtn" disabled>上一页</button>
+            <div class="page-numbers" id="pageNumbers"></div>
+            <button onclick="nextPage()" id="nextBtn" disabled>下一页</button>
+        </div>
+    </div>
+
+</div>
+
+
+</body>
+</html>
