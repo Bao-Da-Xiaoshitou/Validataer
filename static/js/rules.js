@@ -53,27 +53,12 @@ function createRuleCard(rule) {
         <div class="rule-description">${escapeHtml(rule.description)}</div>
         <div class="rule-pattern">${escapeHtml(rule.pattern)}</div>
         <div class="rule-column">列名: ${escapeHtml(rule.column_name)}</div>
-        <div class="rule-meta">
-            <span class="rule-badge severity-${rule.severity}">
-                ${getSeverityText(rule.severity)}
-            </span>
-        </div>
         <div class="rule-actions">
             <button class="btn-edit" onclick="editRule('${rule.rule_id}')">编辑</button>
             <button class="btn-delete" onclick="deleteRule('${rule.rule_id}')">删除</button>
         </div>
     `;
     return card;
-}
-
-// 获取严重程度文本
-function getSeverityText(severity) {
-    const map = {
-        'high': '高危',
-        'medium': '中危',
-        'low': '低危'
-    };
-    return map[severity] || severity;
 }
 
 // 打开模态框
@@ -91,7 +76,6 @@ function openModal(rule = null) {
         document.getElementById('ruleDescription').value = rule.description;
         document.getElementById('columnName').value = rule.column_name;
         document.getElementById('rulePattern').value = rule.pattern;
-        document.getElementById('ruleSeverity').value = rule.severity;
         document.getElementById('ruleEnabled').checked = rule.enabled;
     } else {
         editingRuleId = null;
@@ -186,7 +170,6 @@ document.getElementById('ruleForm').addEventListener('submit', async function(e)
         description: document.getElementById('ruleDescription').value,
         column_name: document.getElementById('columnName').value,
         pattern: document.getElementById('rulePattern').value,
-        severity: document.getElementById('ruleSeverity').value,
         enabled: document.getElementById('ruleEnabled').checked
     };
 

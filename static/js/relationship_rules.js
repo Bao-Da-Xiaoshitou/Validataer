@@ -4,13 +4,11 @@ let currentRules = [];
 let currentEditingRule = null;
 let relatedColumnCount = 0;
 
-// 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
     loadRules();
     loadColumns();
 });
 
-// 加载所有关系验证规则
 async function loadRules() {
     try {
         const res = await fetch(`${BASE_URL}/relationship_rules`);
@@ -105,7 +103,6 @@ function createRuleCard(rule) {
         ` : ''}
         <div class="rule-meta">
             <span class="rule-badge validation-type">${getValidationTypeText(rule.validation_type)}</span>
-            <span class="rule-badge severity-${rule.severity}">${getSeverityText(rule.severity)}</span>
         </div>
         <div class="rule-actions">
             <button class="btn-edit" onclick="editRule('${rule.rule_id}')">编辑</button>
@@ -133,11 +130,11 @@ function getValidationTypeText(type) {
 // 获取比较操作文本
 function getComparisonText(comparison) {
     const comparisons = {
-        'after': '之后',
-        'before': '之前',
-        'equal': '等于',
-        'after_or_equal': '之后或等于',
-        'before_or_equal': '之前或等于',
+        'after': '晚于主键',
+        'before': '早于主键',
+        'equal': '等于主键',
+        'after_or_equal': '晚于或等于主键',
+        'before_or_equal': '早于或等于主键',
         'greater': '大于',
         'less': '小于',
         'greater_or_equal': '大于或等于',
@@ -150,16 +147,6 @@ function getComparisonText(comparison) {
         'gender': '性别'
     };
     return comparisons[comparison] || comparison;
-}
-
-// 获取严重程度文本
-function getSeverityText(severity) {
-    const severities = {
-        'low': '低',
-        'medium': '中',
-        'high': '高'
-    };
-    return severities[severity] || severity;
 }
 
 // 打开添加/编辑模态框
@@ -185,7 +172,6 @@ function openModal(ruleId = null) {
             document.getElementById('ruleDescription').value = rule.description;
             document.getElementById('primaryKey').value = rule.primary_key;
             document.getElementById('validationType').value = rule.validation_type;
-            document.getElementById('ruleSeverity').value = rule.severity;
             document.getElementById('ruleEnabled').checked = rule.enabled;
             
             // 加载关联列
@@ -253,11 +239,11 @@ function addRelatedColumn(column = '', comparison = 'after') {
     
     if (validationType === 'date_comparison') {
         comparisonOptions = `
-            <option value="after" ${comparison === 'after' ? 'selected' : ''}>之后</option>
-            <option value="before" ${comparison === 'before' ? 'selected' : ''}>之前</option>
-            <option value="equal" ${comparison === 'equal' ? 'selected' : ''}>等于</option>
-            <option value="after_or_equal" ${comparison === 'after_or_equal' ? 'selected' : ''}>之后或等于</option>
-            <option value="before_or_equal" ${comparison === 'before_or_equal' ? 'selected' : ''}>之前或等于</option>
+            <option value="after" ${comparison === 'after' ? 'selected' : ''}>晚于主键</option>
+            <option value="before" ${comparison === 'before' ? 'selected' : ''}>早于主键</option>
+            <option value="equal" ${comparison === 'equal' ? 'selected' : ''}>等于主键</option>
+            <option value="after_or_equal" ${comparison === 'after_or_equal' ? 'selected' : ''}>晚于或等于主键</option>
+            <option value="before_or_equal" ${comparison === 'before_or_equal' ? 'selected' : ''}>早于或等于主键</option>
         `;
     } else if (validationType === 'numeric_comparison') {
         comparisonOptions = `
@@ -316,7 +302,6 @@ document.getElementById('ruleForm').addEventListener('submit', async function(e)
     const ruleDescription = document.getElementById('ruleDescription').value;
     const primaryKey = document.getElementById('primaryKey').value;
     const validationType = document.getElementById('validationType').value;
-    const severity = document.getElementById('ruleSeverity').value;
     const enabled = document.getElementById('ruleEnabled').checked;
     
     // 收集关联列配置
@@ -346,7 +331,6 @@ document.getElementById('ruleForm').addEventListener('submit', async function(e)
         related_columns: relatedColumns,
         validation_type: validationType,
         validation_config: {},
-        severity: severity,
         enabled: enabled
     };
     

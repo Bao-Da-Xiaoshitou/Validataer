@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>文件管理</title>
+    <link rel="stylesheet" href="./static/css/style.css">
+    <style>
+        .files-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .back-link {
+            color: #007bff;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .files-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .files-table th,
+        .files-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .files-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .files-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .file-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+
+        .file-status.available {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .file-status.unavailable {
+            background: #f8f9fa;
+            color: #6c757d;
+        }
+
+        .download-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            margin: 2px;
+            transition: all 0.2s;
+        }
+
+        .download-btn.primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .download-btn.primary:hover {
+            background: #0056b3;
+        }
+
+        .download-btn.success {
+            background: #28a745;
+            color: white;
+        }
+
+        .download-btn.success:hover {
+            background: #1e7e34;
+        }
+
+        .download-btn.danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .download-btn.danger:hover {
+            background: #c82333;
+        }
+
+        .download-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .delete-btn {
+            padding: 6px 12px;
+            border: 1px solid #dc3545;
+            background: white;
+            color: #dc3545;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-left: 10px;
+            transition: all 0.2s;
+        }
+
+        .delete-btn:hover {
+            background: #dc3545;
+            color: white;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state p {
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+
+        .row-count {
+            font-size: 12px;
+            color: #666;
+            margin-left: 5px;
+        }
+
+        .actions-cell {
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="files-container">
+        <div class="header-actions">
+            <div>
+                <a href="/" class="back-link">← 返回数据查看器</a>
+                <h1 style="margin: 10px 0;">文件管理</h1>
+            </div>
+            <button onclick="loadFiles()" class="download-btn primary">刷新列表</button>
+        </div>
+
+        <div id="filesList">
+            <div class="empty-state">
+                <p>加载中...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = "http://127.0.0.1:5000";
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadFiles();
+        });
+
+        async function loadFiles() {
+            const container = document.getElementById('filesList');
+            container.innerHTML = '<div class="empty-state"><p>加载中...</p></div>';
+
+            try {
+                const res = await fetch(`${BASE_URL}/api/files`);
+                const data = await res.json();
+
+                if (data.files.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><p>暂无处理记录</p></div>';
+                    return;
+                }
+
+                let html = `
+                    <table class="files-table">
+                        <thead>
+                            <tr>
+                                <th>创建时间</th>
+                                <th>更新时间</th>
+                                <th>文件状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                data.files.forEach(file => {
+                    html += `
+                        <tr>
+                            <td>${file.created_at}</td>
+                            <td>${file.updated_at}</td>
+                            <td>
+                                <span class="file-status ${file.files.original ? 'available' : 'unavailable'}">
+                                    原始 ${file.row_counts.original}行
+                                </span>
+                                <span class="file-status ${file.files.processed ? 'available' : 'unavailable'}">
+                                    处理 ${file.row_counts.processed}行
+                                </span>
+                                <span class="file-status ${file.files.rejected ? 'available' : 'unavailable'}">
+                                    剔除 ${file.row_counts.rejected}行
+                                </span>
+                            </td>
+                            <td class="actions-cell">
+                                <button class="download-btn primary" onclick="downloadFile('${file.session_id}', 'original')" ${!file.files.original ? 'disabled' : ''}>原始</button>
+                                <button class="download-btn success" onclick="downloadFile('${file.session_id}', 'processed')" ${!file.files.processed ? 'disabled' : ''}>处理</button>
+                                <button class="download-btn danger" onclick="downloadFile('${file.session_id}', 'rejected')" ${!file.files.rejected ? 'disabled' : ''}>剔除</button>
+                                <button class="delete-btn" onclick="deleteSession('${file.session_id}')">删除</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (error) {
+                container.innerHTML = `<div class="empty-state"><p>加载失败: ${error.message}</p></div>`;
+            }
+        }
+
+        function downloadFile(sessionId, fileType) {
+            window.location.href = `${BASE_URL}/api/files/${sessionId}/download/${fileType}`;
+        }
+
+        async function deleteSession(sessionId) {
+            if (!confirm('确定要删除这个会话的所有文件吗？')) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`${BASE_URL}/api/files/${sessionId}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    alert('删除成功');
+                    loadFiles();
+                } else {
+                    const error = await res.json();
+                    alert(`删除失败: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`删除失败: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>

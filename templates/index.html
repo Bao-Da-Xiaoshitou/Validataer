@@ -30,6 +30,7 @@
             <button onclick="processCsvQuick()" class="process-quick-btn">快速清洗</button>
             <a href="/rules_page" class="rules-link">规则管理</a>
             <a href="/relationship_rules_page" class="rules-link">关系规则管理</a>
+            <a href="/files_page" class="rules-link">文件管理</a>
         </div>
         <span id="dataStats">共 0 行 / 0 列</span>
     </div>
@@ -50,7 +51,6 @@
                             <th>列名</th>
                             <th>值</th>
                             <th>验证规则</th>
-                            <th>严重程度</th>
                             <th>期望格式</th>
                         </tr>
                     </thead>
@@ -120,17 +120,8 @@
                 <div class="form-group">
                     <label>关联列配置：</label>
                     <div id="relatedColumnsContainer">
-                        <!-- 动态添加关联列 -->
                     </div>
                     <button onclick="addRelatedColumn()" class="add-column-btn">添加关联列</button>
-                </div>
-                <div class="form-group">
-                    <label for="severity">严重程度：</label>
-                    <select id="severity">
-                        <option value="high">高危</option>
-                        <option value="medium">中危</option>
-                        <option value="low">低危</option>
-                    </select>
                 </div>
                 <div class="form-group">
                     <button onclick="saveRelationshipRule()" class="validate-btn">保存规则</button>
@@ -180,7 +171,6 @@
                             <th>当前值</th>
                             <th>期望值</th>
                             <th>验证规则</th>
-                            <th>严重程度</th>
                             <th>描述</th>
                         </tr>
                     </thead>

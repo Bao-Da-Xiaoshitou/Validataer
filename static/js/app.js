@@ -310,16 +310,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// 获取严重程度文本
-function getSeverityText(severity) {
-    const map = {
-        'high': '高危',
-        'medium': '中危',
-        'low': '低危'
-    };
-    return map[severity] || severity;
-}
-
 // ==================== 数据验证功能 ====================
 
 let validationCurrentPage = 1;
@@ -429,7 +419,6 @@ function renderInvalidData(invalidRecords) {
             <td>${escapeHtml(Object.keys(record).find(key => key !== '剔除原因' && key !== 'row_index') || '')}</td>
             <td>${escapeHtml(Object.values(record).find(value => typeof value !== 'string' || value !== '剔除原因') || '')}</td>
             <td>${escapeHtml(record.rule_name || '')}</td>
-            <td><span class="severity-badge severity-medium">中危</span></td>
             <td>${escapeHtml(record.剔除原因 || '')}</td>
         `;
         tbody.appendChild(row);
@@ -747,18 +736,6 @@ function showRelationshipResults(result) {
             <div class="summary-count">${result.total_errors}</div>
             <div class="summary-label">关系验证错误数</div>
         </div>
-        <div class="summary-item">
-            <div class="summary-count summary-high">${result.severity_count.high}</div>
-            <div class="summary-label">高危错误</div>
-        </div>
-        <div class="summary-item">
-            <div class="summary-count summary-medium">${result.severity_count.medium}</div>
-            <div class="summary-label">中危错误</div>
-        </div>
-        <div class="summary-item">
-            <div class="summary-count summary-low">${result.severity_count.low}</div>
-            <div class="summary-label">低危错误</div>
-        </div>
     `;
 
     // 渲染关系验证错误数据
@@ -766,7 +743,7 @@ function showRelationshipResults(result) {
     tbody.innerHTML = '';
 
     if (result.errors.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">关系验证通过，无错误</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">关系验证通过，无错误</td></tr>';
     } else {
         result.errors.forEach(error => {
             const row = document.createElement('tr');
@@ -776,7 +753,6 @@ function showRelationshipResults(result) {
                 <td>${escapeHtml(error.value)}</td>
                 <td>${escapeHtml(error.expected_value)}</td>
                 <td>${escapeHtml(error.rule_name)}</td>
-                <td><span class="severity-badge severity-${error.severity}">${getSeverityText(error.severity)}</span></td>
                 <td>${escapeHtml(error.description)}</td>
             `;
             tbody.appendChild(row);
@@ -951,7 +927,6 @@ async function saveRelationshipRule() {
     const ruleDescription = document.getElementById('ruleDescription').value.trim();
     const primaryKey = document.getElementById('primaryKey').value;
     const validationType = document.getElementById('validationType').value;
-    const severity = document.getElementById('severity').value;
     
     if (!ruleId || !ruleName || !primaryKey) {
         alert('请填写规则ID、规则名称和主键列');
@@ -986,7 +961,6 @@ async function saveRelationshipRule() {
         related_columns: relatedColumns,
         validation_type: validationType,
         validation_config: {},
-        severity: severity,
         enabled: true
     };
     
@@ -1032,7 +1006,6 @@ function clearRelationshipValidationForm() {
     document.getElementById('ruleDescription').value = '';
     document.getElementById('primaryKey').selectedIndex = 0;
     document.getElementById('validationType').selectedIndex = 0;
-    document.getElementById('severity').selectedIndex = 0;
     document.getElementById('relatedColumnsContainer').innerHTML = '';
     relatedColumnCount = 0;
 }

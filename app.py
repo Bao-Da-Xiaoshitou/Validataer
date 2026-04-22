@@ -7,13 +7,30 @@ import io
 import os
 import uuid
 import shutil
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
 CORS(app)
 
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+FILE_RETENTION_DAYS = 7
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+def cleanup_old_files():
+    """清理过期的会话文件"""
+    if not os.path.exists(UPLOAD_DIR):
+        return
+    cutoff_time = datetime.now() - timedelta(days=FILE_RETENTION_DAYS)
+    for session_dir in os.listdir(UPLOAD_DIR):
+        session_path = os.path.join(UPLOAD_DIR, session_dir)
+        if os.path.isdir(session_path):
+            dir_mtime = datetime.fromtimestamp(os.path.getmtime(session_path))
+            if dir_mtime < cutoff_time:
+                shutil.rmtree(session_path)
+                print(f"清理过期文件: {session_dir}")
+
+cleanup_old_files()
 
 def get_session_id():
     session_id = request.headers.get('X-Session-ID')
@@ -377,6 +394,118 @@ def validate_relationships():
         data = df.fillna("").to_dict(orient='records')
         result = data_validator.validate_relationships(data)
         return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/files_page')
+def files_page():
+    """文件浏览页面"""
+    return render_template('files.html')
+
+
+@app.route('/api/files', methods=['GET'])
+def get_all_files():
+    """获取所有历史文件列表"""
+    if not os.path.exists(UPLOAD_DIR):
+        return jsonify({'files': []})
+
+    files_list = []
+    for session_dir in os.listdir(UPLOAD_DIR):
+        session_path = os.path.join(UPLOAD_DIR, session_dir)
+        if os.path.isdir(session_path):
+            dir_mtime = datetime.fromtimestamp(os.path.getmtime(session_path))
+            dir_ctime = datetime.fromtimestamp(os.path.getctime(session_path))
+
+            original_path = os.path.join(session_path, 'original.csv')
+            processed_path = os.path.join(session_path, 'processed.csv')
+            rejected_path = os.path.join(session_path, 'rejected.csv')
+
+            original_rows = 0
+            processed_rows = 0
+            rejected_rows = 0
+
+            if os.path.exists(original_path):
+                try:
+                    original_rows = len(pd.read_csv(original_path))
+                except:
+                    pass
+
+            if os.path.exists(processed_path):
+                try:
+                    processed_rows = len(pd.read_csv(processed_path))
+                except:
+                    pass
+
+            if os.path.exists(rejected_path):
+                try:
+                    rejected_rows = len(pd.read_csv(rejected_path)) - 1 if rejected_rows > 0 else 0
+                except:
+                    pass
+
+            file_info = {
+                'session_id': session_dir,
+                'created_at': dir_ctime.strftime('%Y-%m-%d %H:%M:%S'),
+                'updated_at': dir_mtime.strftime('%Y-%m-%d %H:%M:%S'),
+                'files': {
+                    'original': os.path.exists(original_path),
+                    'processed': os.path.exists(processed_path),
+                    'rejected': os.path.exists(rejected_path)
+                },
+                'row_counts': {
+                    'original': original_rows,
+                    'processed': processed_rows,
+                    'rejected': rejected_rows
+                }
+            }
+            files_list.append(file_info)
+
+    files_list.sort(key=lambda x: x['created_at'], reverse=True)
+    return jsonify({'files': files_list})
+
+
+@app.route('/api/files/<session_id>/download/<file_type>', methods=['GET'])
+def download_file(session_id, file_type):
+    """下载指定会话的指定文件"""
+    if file_type not in ['original', 'processed', 'rejected']:
+        return jsonify({'error': '无效的文件类型'}), 400
+
+    session_path = os.path.join(UPLOAD_DIR, session_id)
+    if not os.path.exists(session_path):
+        return jsonify({'error': '文件不存在'}), 404
+
+    file_path = os.path.join(session_path, f'{file_type}.csv')
+    if not os.path.exists(file_path):
+        return jsonify({'error': f'{file_type} 文件不存在'}), 404
+
+    try:
+        with open(file_path, 'rb') as f:
+            csv_data = f.read()
+
+        filename_map = {
+            'original': f'original_{session_id[:8]}.csv',
+            'processed': f'processed_{session_id[:8]}.csv',
+            'rejected': f'rejected_{session_id[:8]}.csv'
+        }
+
+        response = make_response(csv_data)
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8-sig'
+        response.headers['Content-Disposition'] = f'attachment; filename*=UTF-8\'\'{filename_map[file_type]}'
+        return response
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/files/<session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    """删除指定会话的所有文件"""
+    session_path = os.path.join(UPLOAD_DIR, session_id)
+    if not os.path.exists(session_path):
+        return jsonify({'error': '文件不存在'}), 404
+
+    try:
+        shutil.rmtree(session_path)
+        return jsonify({'message': '文件删除成功'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

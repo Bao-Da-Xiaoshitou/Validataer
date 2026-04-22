@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-数据验证器 - 用于验证CSV数据的格式和关系
-"""
-
 import re
 import json
 from typing import List, Dict, Any, Optional
@@ -13,7 +7,6 @@ from config import RULES_CONFIG, DEFAULT_RULES, DATE_FORMATS, RELATIONSHIP_VALID
 
 
 class ColumnValidationRule:
-    """列验证规则类"""
     
     def __init__(self, rule_id: str, name: str, description: str, 
                  column_name: str, pattern: str, 
