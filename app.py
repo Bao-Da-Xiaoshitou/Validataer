@@ -1,15 +1,35 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, make_response
 from flask_cors import CORS
 import pandas as pd
-from matcher import rule_manager, dlp_detector, DLPRule
 from data_validator import validation_rule_manager, data_validator, ColumnValidationRule, RelationshipValidationRule
 from config import MESSAGES, PAGINATION, APP_CONFIG
+import io
+import os
+import uuid
+import shutil
 
 app = Flask(__name__)
+app.secret_key = 'your_secret_key_here'
 CORS(app)
 
-DATA = None
-VIOLATIONS = None
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+def get_session_id():
+    session_id = request.headers.get('X-Session-ID')
+    if not session_id:
+        session_id = str(uuid.uuid4())
+    return session_id
+
+def get_session_dir(session_id):
+    session_dir = os.path.join(UPLOAD_DIR, session_id)
+    os.makedirs(session_dir, exist_ok=True)
+    return session_dir
+
+def cleanup_session(session_id):
+    session_dir = os.path.join(UPLOAD_DIR, session_id)
+    if os.path.exists(session_dir):
+        shutil.rmtree(session_dir)
 
 @app.route('/')
 def index():
@@ -25,221 +45,212 @@ def relationship_rules_page():
 
 @app.route('/upload', methods=['POST'])
 def upload_csv():
-    global DATA
-
     file = request.files.get('file')
     if not file:
         return jsonify({'error': MESSAGES["no_file_uploaded"]}), 400
 
+    session_id = get_session_id()
+    session_dir = get_session_dir(session_id)
+
     try:
-        DATA = pd.read_csv(file)
+        original_path = os.path.join(session_dir, 'original.csv')
+        df = pd.read_csv(file)
+        df.to_csv(original_path, index=False, encoding='utf-8-sig')
+
         return jsonify({
             'message': MESSAGES["file_loaded_successfully"],
-            'rows': DATA.shape[0],
-            'columns': list(DATA.columns)
+            'rows': len(df),
+            'columns': list(df.columns),
+            'session_id': session_id
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/data', methods=['GET'])
 def get_data():
-    global DATA
+    session_id = request.args.get('session_id')
+    if not session_id:
+        return jsonify({'error': 'Missing session ID'}), 400
 
-    if DATA is None:
-        return jsonify({'error': MESSAGES["no_data_loaded"]}), 400
+    data_type = request.args.get('data_type', 'original')
+    session_dir = get_session_dir(session_id)
 
-    page = int(request.args.get('page', PAGINATION["default_page"]))
-    page_size = int(request.args.get('page_size', PAGINATION["default_page_size"]))
-
-    start_row = (page - 1) * page_size
-    end_row = start_row + page_size
-
-    df_slice = DATA.iloc[start_row:end_row]
-
-    return jsonify({
-        'page': page,
-        'page_size': page_size,
-        'total_rows': DATA.shape[0],
-        'total_columns': len(DATA.columns),
-        'columns': list(DATA.columns),
-        'data': df_slice.fillna("").to_dict(orient='records')
-    })
-
-
-@app.route('/rules', methods=['GET'])
-def get_rules():
-    """获取所有DLP规则"""
-    return jsonify(rule_manager.get_all_rules())
-
-@app.route('/rules', methods=['POST'])
-def add_rule():
-    """添加DLP规则"""
-    try:
-        data = request.json
-        rule = DLPRule(
-            rule_id=data['rule_id'],
-            name=data['name'],
-            description=data['description'],
-            pattern=data['pattern'],
-            rule_type=data.get('rule_type', 'regex'),
-            severity=data.get('severity', 'medium'),
-            enabled=data.get('enabled', True)
-        )
-        rule_manager.add_rule(rule)
-        return jsonify({'message': MESSAGES["rule_added_successfully"], 'rule': rule.to_dict()})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-@app.route('/rules/<rule_id>', methods=['PUT'])
-def update_rule(rule_id):
-    """更新DLP规则"""
-    try:
-        data = request.json
-        success = rule_manager.update_rule(rule_id, data)
-        if success:
-            return jsonify({'message': MESSAGES["rule_updated_successfully"]})
-        else:
-            return jsonify({'error': MESSAGES["rule_not_found"]}), 404
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-@app.route('/rules/<rule_id>', methods=['DELETE'])
-def delete_rule(rule_id):
-    """删除DLP规则"""
-    success = rule_manager.delete_rule(rule_id)
-    if success:
-        return jsonify({'message': MESSAGES["rule_deleted_successfully"]})
+    file_path = None
+    if data_type == 'processed':
+        file_path = os.path.join(session_dir, 'processed.csv')
+    elif data_type == 'rejected':
+        file_path = os.path.join(session_dir, 'rejected.csv')
     else:
-        return jsonify({'error': MESSAGES["rule_not_found"]}), 404
+        file_path = os.path.join(session_dir, 'original.csv')
 
-@app.route('/scan', methods=['POST'])
-def scan_data():
-    global DATA, VIOLATIONS
-
-    if DATA is None:
+    if not os.path.exists(file_path):
+        if data_type == 'rejected':
+            return jsonify({
+                'page': 1,
+                'page_size': PAGINATION["default_page_size"],
+                'total_rows': 0,
+                'total_columns': 1,
+                'columns': ['剔除原因'],
+                'data': []
+            })
         return jsonify({'error': MESSAGES["no_data_loaded"]}), 400
 
     try:
-        columns = list(DATA.columns)
-        data = DATA.fillna("").to_dict(orient='records')
-        
-        result = dlp_detector.detect_data(data, columns)
-        VIOLATIONS = result['violations']
-        
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        df = pd.read_csv(file_path)
 
-@app.route('/violations', methods=['GET'])
-def get_violations():
-    """获取违规数据"""
-    global DATA, VIOLATIONS
+        if df.empty:
+            if data_type == 'rejected':
+                columns = ['剔除原因']
+            else:
+                columns = []
+            data = []
+        else:
+            columns = list(df.columns)
+            data = df.to_dict(orient='records')
 
-    if DATA is None or VIOLATIONS is None:
-        return jsonify({'error': MESSAGES["no_violations_found"]}), 400
+        page = int(request.args.get('page', PAGINATION["default_page"]))
+        page_size = int(request.args.get('page_size', PAGINATION["default_page_size"]))
 
-    try:
-        page = int(request.args.get('page', 1))
-        page_size = int(request.args.get('page_size', 20))
+        start_row = (page - 1) * page_size
+        end_row = start_row + page_size
 
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-
-        extracted = dlp_detector.extract_violations(
-            DATA.fillna("").to_dict(orient='records'),
-            VIOLATIONS
-        )
-
-        paginated = extracted[start_idx:end_idx]
+        df_slice = data[start_row:end_row]
 
         return jsonify({
             'page': page,
             'page_size': page_size,
-            'total': len(extracted),
-            'violations': paginated
+            'total_rows': len(data),
+            'total_columns': len(columns),
+            'columns': columns,
+            'data': df_slice
         })
+    except pd.errors.EmptyDataError:
+        if data_type == 'rejected':
+            return jsonify({
+                'page': 1,
+                'page_size': PAGINATION["default_page_size"],
+                'total_rows': 0,
+                'total_columns': 1,
+                'columns': ['剔除原因'],
+                'data': []
+            })
+        return jsonify({'error': MESSAGES["no_data_loaded"]}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
-# ==================== 数据验证 API ====================
 
 @app.route('/validate', methods=['POST'])
 def validate_data():
-    """
-    验证数据
-    """
-    global DATA
+    session_id = request.form.get('session_id') or request.json.get('session_id') if request.is_json and request.json else request.form.get('session_id')
+    if not session_id:
+        session_id = request.args.get('session_id')
 
-    if DATA is None:
+    if not session_id:
+        return jsonify({'error': 'Missing session ID'}), 400
+
+    session_dir = get_session_dir(session_id)
+    original_path = os.path.join(session_dir, 'original.csv')
+
+    if not os.path.exists(original_path):
         return jsonify({'error': MESSAGES["no_data_loaded"]}), 400
 
     try:
-        columns = list(DATA.columns)
-        data = DATA.fillna("").to_dict(orient='records')
-        result = data_validator.validate_data(data, columns)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        df = pd.read_csv(original_path)
+        original_data = df.to_dict(orient='records')
+        original_columns = list(df.columns)
 
+        result = data_validator.validate_data(original_data, original_columns)
 
-@app.route('/invalid_data', methods=['GET'])
-def get_invalid_data():
-    """
-    获取验证失败的数据
-    """
-    global DATA
+        valid_records = []
+        rejected_records = []
 
-    if DATA is None:
-        return jsonify({'error': MESSAGES["no_data_loaded"]}), 400
+        for row in original_data:
+            valid_records.append(row.copy())
 
-    try:
-        page = int(request.args.get('page', 1))
-        page_size = int(request.args.get('page_size', 20))
+        invalid_row_indices = [record['row_index'] - 1 for record in result['invalid_records']]
+        for i in sorted(invalid_row_indices, reverse=True):
+            if i < len(valid_records):
+                rejected_data = valid_records.pop(i)
+                for record in result['invalid_records']:
+                    if record['row_index'] - 1 == i:
+                        rejected_data['剔除原因'] = '; '.join([err['description'] for err in record['errors']])
+                        break
+                rejected_records.append(rejected_data)
 
-        columns = list(DATA.columns)
-        data = DATA.fillna("").to_dict(orient='records')
-        result = data_validator.validate_data(data, columns)
+        processed_path = os.path.join(session_dir, 'processed.csv')
+        rejected_path = os.path.join(session_dir, 'rejected.csv')
 
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        paginated = result['invalid_records'][start_idx:end_idx]
+        pd.DataFrame(valid_records).to_csv(processed_path, index=False, encoding='utf-8-sig')
+
+        if rejected_records:
+            pd.DataFrame(rejected_records).to_csv(rejected_path, index=False, encoding='utf-8-sig')
+        else:
+            pd.DataFrame(columns=['剔除原因']).to_csv(rejected_path, index=False, encoding='utf-8-sig')
 
         return jsonify({
-            'page': page,
-            'page_size': page_size,
-            'total': len(result['invalid_records']),
-            'invalid_records': paginated
+            'total_rows': len(original_data),
+            'valid_rows': len(valid_records),
+            'rejected_rows': len(rejected_records),
+            'message': f'数据验证完成！有效数据 {len(valid_records)} 条，剔除数据 {len(rejected_records)} 条'
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/download_processed', methods=['GET'])
+def download_processed():
+    session_id = request.args.get('session_id')
+    if not session_id:
+        return jsonify({'error': 'Missing session ID'}), 400
 
-@app.route('/validate_column', methods=['POST'])
-def validate_column():
-    """
-    验证指定列
-    """
-    global DATA
+    session_dir = get_session_dir(session_id)
+    processed_path = os.path.join(session_dir, 'processed.csv')
 
-    if DATA is None:
-        return jsonify({'error': MESSAGES["no_data_loaded"]}), 400
+    if not os.path.exists(processed_path):
+        return jsonify({'error': '没有可下载的处理后数据'}), 400
 
     try:
-        data = request.json
-        column_name = data['column_name']
-        pattern = data['pattern']
+        with open(processed_path, 'rb') as f:
+            csv_data = f.read()
 
-        if column_name not in DATA.columns:
-            return jsonify({'error': MESSAGES["column_not_found"].format(column_name)}), 400
-
-        data = DATA.fillna("").to_dict(orient='records')
-        result = data_validator.validate_column(data, column_name, pattern)
-        return jsonify(result)
+        response = make_response(csv_data)
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8-sig'
+        response.headers['Content-Disposition'] = 'attachment; filename=processed_data.csv'
+        return response
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        return jsonify({'error': str(e)}), 500
 
+@app.route('/download_rejected', methods=['GET'])
+def download_rejected():
+    session_id = request.args.get('session_id')
+    if not session_id:
+        return jsonify({'error': 'Missing session ID'}), 400
+
+    session_dir = get_session_dir(session_id)
+    rejected_path = os.path.join(session_dir, 'rejected.csv')
+
+    if not os.path.exists(rejected_path):
+        return jsonify({'error': '没有可下载的剔除数据'}), 400
+
+    try:
+        with open(rejected_path, 'rb') as f:
+            csv_data = f.read()
+
+        response = make_response(csv_data)
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8-sig'
+        response.headers['Content-Disposition'] = 'attachment; filename=rejected_data.csv'
+        return response
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/reset', methods=['POST'])
+def reset_data():
+    session_id = request.form.get('session_id') or (request.json.get('session_id') if request.is_json and request.json else None)
+    if not session_id:
+        session_id = request.args.get('session_id')
+
+    if session_id:
+        cleanup_session(session_id)
+
+    return jsonify({'message': '数据已重置'})
 
 @app.route('/validation_rules', methods=['GET'])
 def get_validation_rules():
@@ -348,94 +359,24 @@ def validate_relationships():
     """
     验证数据中的关系规则
     """
-    global DATA
+    session_id = request.form.get('session_id') or request.json.get('session_id') if request.is_json and request.json else request.form.get('session_id')
+    if not session_id:
+        session_id = request.args.get('session_id')
 
-    if DATA is None:
+    if not session_id:
+        return jsonify({'error': 'Missing session ID'}), 400
+
+    session_dir = get_session_dir(session_id)
+    original_path = os.path.join(session_dir, 'original.csv')
+
+    if not os.path.exists(original_path):
         return jsonify({'error': MESSAGES["no_data_loaded"]}), 400
 
     try:
-        data = DATA.fillna("").to_dict(orient='records')
+        df = pd.read_csv(original_path)
+        data = df.fillna("").to_dict(orient='records')
         result = data_validator.validate_relationships(data)
         return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/process_csv', methods=['POST'])
-def process_csv():
-    """
-    处理CSV文件，剔除违规数据，返回处理后的CSV文件
-    """
-    global DATA
-
-    if DATA is None:
-        return jsonify({'error': MESSAGES["no_data_loaded"]}), 400
-
-    try:
-        # 验证并过滤数据（包含关系验证）
-        columns = list(DATA.columns)
-        data = DATA.fillna("").to_dict(orient='records')
-        
-        # 过滤出有效数据
-        valid_data = data_validator.filter_valid_data(data, columns, include_relationships=True)
-        
-        if not valid_data:
-            return jsonify({'error': MESSAGES["no_valid_data_found"]}), 400
-
-        valid_df = pd.DataFrame(valid_data)
-
-        import io
-        output = io.StringIO()
-        valid_df.to_csv(output, index=False, encoding='utf-8-sig')
-        csv_data = output.getvalue()
-
-        from flask import make_response
-        response = make_response(csv_data)
-        response.headers['Content-Type'] = 'text/csv'
-        response.headers['Content-Disposition'] = 'attachment; filename=processed_data.csv'
-        
-        return response
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/process_csv_quick', methods=['POST'])
-def process_csv_quick():
-    """
-    快速清洗CSV文件，只使用列级验证，不包含关系验证
-    """
-    global DATA
-
-    if DATA is None:
-        return jsonify({'error': MESSAGES["no_data_loaded"]}), 400
-
-    try:
-        # 验证并过滤数据（只使用列级验证）
-        columns = list(DATA.columns)
-        data = DATA.fillna("").to_dict(orient='records')
-        
-        # 过滤出有效数据（不包含关系验证）
-        valid_data = data_validator.filter_valid_data(data, columns, include_relationships=False)
-        
-        if not valid_data:
-            return jsonify({'error': MESSAGES["no_valid_data_found"]}), 400
-        
-        # 转换为DataFrame
-        valid_df = pd.DataFrame(valid_data)
-        
-        # 生成CSV数据
-        import io
-        output = io.StringIO()
-        valid_df.to_csv(output, index=False, encoding='utf-8-sig')
-        csv_data = output.getvalue()
-        
-        # 设置响应头
-        from flask import make_response
-        response = make_response(csv_data)
-        response.headers['Content-Type'] = 'text/csv'
-        response.headers['Content-Disposition'] = 'attachment; filename=processed_data_quick.csv'
-        
-        return response
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

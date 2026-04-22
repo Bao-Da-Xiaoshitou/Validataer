@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // 加载所有规则
 async function loadRules() {
     try {
-        const res = await fetch(`${BASE_URL}/rules`);
+        const res = await fetch(`${BASE_URL}/validation_rules`);
         const rules = await res.json();
         renderRules(rules);
     } catch (error) {
@@ -52,12 +52,10 @@ function createRuleCard(rule) {
         </div>
         <div class="rule-description">${escapeHtml(rule.description)}</div>
         <div class="rule-pattern">${escapeHtml(rule.pattern)}</div>
+        <div class="rule-column">列名: ${escapeHtml(rule.column_name)}</div>
         <div class="rule-meta">
             <span class="rule-badge severity-${rule.severity}">
                 ${getSeverityText(rule.severity)}
-            </span>
-            <span class="rule-badge rule-type">
-                ${getRuleTypeText(rule.rule_type)}
             </span>
         </div>
         <div class="rule-actions">
@@ -78,16 +76,6 @@ function getSeverityText(severity) {
     return map[severity] || severity;
 }
 
-// 获取规则类型文本
-function getRuleTypeText(type) {
-    const map = {
-        'regex': '正则表达式',
-        'exact': '精确匹配',
-        'contains': '包含匹配'
-    };
-    return map[type] || type;
-}
-
 // 打开模态框
 function openModal(rule = null) {
     const modal = document.getElementById('ruleModal');
@@ -101,7 +89,7 @@ function openModal(rule = null) {
         document.getElementById('ruleId').disabled = true;
         document.getElementById('ruleName').value = rule.name;
         document.getElementById('ruleDescription').value = rule.description;
-        document.getElementById('ruleType').value = rule.rule_type;
+        document.getElementById('columnName').value = rule.column_name;
         document.getElementById('rulePattern').value = rule.pattern;
         document.getElementById('ruleSeverity').value = rule.severity;
         document.getElementById('ruleEnabled').checked = rule.enabled;
@@ -134,7 +122,7 @@ function editRule(ruleId) {
 // 查找规则
 async function findRule(ruleId) {
     try {
-        const res = await fetch(`${BASE_URL}/rules`);
+        const res = await fetch(`${BASE_URL}/validation_rules`);
         const rules = await res.json();
         return rules.find(r => r.rule_id === ruleId);
     } catch (error) {
@@ -150,7 +138,7 @@ async function deleteRule(ruleId) {
     }
 
     try {
-        const res = await fetch(`${BASE_URL}/rules/${ruleId}`, {
+        const res = await fetch(`${BASE_URL}/validation_rules/${ruleId}`, {
             method: 'DELETE'
         });
 
@@ -169,7 +157,7 @@ async function deleteRule(ruleId) {
 // 切换规则启用状态
 async function toggleRule(ruleId, enabled) {
     try {
-        const res = await fetch(`${BASE_URL}/rules/${ruleId}`, {
+        const res = await fetch(`${BASE_URL}/validation_rules/${ruleId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -196,7 +184,7 @@ document.getElementById('ruleForm').addEventListener('submit', async function(e)
         rule_id: document.getElementById('ruleId').value,
         name: document.getElementById('ruleName').value,
         description: document.getElementById('ruleDescription').value,
-        rule_type: document.getElementById('ruleType').value,
+        column_name: document.getElementById('columnName').value,
         pattern: document.getElementById('rulePattern').value,
         severity: document.getElementById('ruleSeverity').value,
         enabled: document.getElementById('ruleEnabled').checked
@@ -206,7 +194,7 @@ document.getElementById('ruleForm').addEventListener('submit', async function(e)
         let res;
         if (editingRuleId) {
             // 更新规则
-            res = await fetch(`${BASE_URL}/rules/${editingRuleId}`, {
+            res = await fetch(`${BASE_URL}/validation_rules/${editingRuleId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json'
@@ -215,7 +203,7 @@ document.getElementById('ruleForm').addEventListener('submit', async function(e)
             });
         } else {
             // 添加规则
-            res = await fetch(`${BASE_URL}/rules`, {
+            res = await fetch(`${BASE_URL}/validation_rules`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

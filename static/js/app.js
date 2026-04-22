@@ -4,6 +4,7 @@ const BASE_URL = "http://127.0.0.1:5000";
 let currentPage = 1;
 let totalPages = 1;
 let totalRows = 0;
+let sessionId = null;
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -83,6 +84,8 @@ async function uploadFile() {
             return;
         }
 
+        sessionId = data.session_id;
+
         // 更新数据信息
         totalRows = data.rows;
         document.getElementById('dataStats').textContent = `共 ${data.rows} 行 / ${data.columns.length} 列`;
@@ -113,15 +116,21 @@ function resetUpload() {
     currentPage = 1;
     totalPages = 1;
     totalRows = 0;
+    sessionId = null;
     updatePaginationInfo();
 }
 
 // 加载数据
 async function loadData() {
+    if (!sessionId) {
+        alert("请先上传文件");
+        return;
+    }
+
     const pageSize = parseInt(document.getElementById("pageSize").value);
 
     try {
-        const url = `${BASE_URL}/data?page=${currentPage}&page_size=${pageSize}`;
+        const url = `${BASE_URL}/data?page=${currentPage}&page_size=${pageSize}&session_id=${sessionId}`;
 
         const res = await fetch(url);
         const result = await res.json();
@@ -301,179 +310,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// DLP扫描功能
-let violationsCurrentPage = 1;
-let violationsTotalPages = 1;
-let violationsTotal = 0;
-
-// 扫描数据
-async function scanData() {
-    try {
-        const res = await fetch(`${BASE_URL}/scan`, {
-            method: 'POST'
-        });
-
-        const result = await res.json();
-
-        if (result.error) {
-            alert(`扫描失败: ${result.error}`);
-            return;
-        }
-
-        // 显示扫描结果
-        showScanResults(result);
-    } catch (error) {
-        alert(`扫描失败: ${error.message}`);
-    }
-}
-
-// 显示扫描结果
-function showScanResults(result) {
-    const scanResults = document.getElementById('scanResults');
-    const scanSummary = document.getElementById('scanSummary');
-
-    // 显示摘要
-    scanSummary.innerHTML = `
-        <div class="summary-item">
-            <div class="summary-count">${result.total_violations}</div>
-            <div class="summary-label">总违规数</div>
-        </div>
-        <div class="summary-item">
-            <div class="summary-count summary-high">${result.severity_count.high}</div>
-            <div class="summary-label">高危</div>
-        </div>
-        <div class="summary-item">
-            <div class="summary-count summary-medium">${result.severity_count.medium}</div>
-            <div class="summary-label">中危</div>
-        </div>
-        <div class="summary-item">
-            <div class="summary-count summary-low">${result.severity_count.low}</div>
-            <div class="summary-label">低危</div>
-        </div>
-    `;
-
-    violationsCurrentPage = 1;
-    violationsTotal = result.total_violations;
-    violationsTotalPages = Math.ceil(violationsTotal / 20);
-
-
-    loadViolations();
-
-    scanResults.style.display = 'flex';
-    scanResults.classList.add('active');
-}
-
-function closeScanResults() {
-    const scanResults = document.getElementById('scanResults');
-    scanResults.style.display = 'none';
-    scanResults.classList.remove('active');
-}
-
-// 加载违规数据
-async function loadViolations() {
-    try {
-        const res = await fetch(`${BASE_URL}/violations?page=${violationsCurrentPage}&page_size=20`);
-        const result = await res.json();
-
-        if (result.error) {
-            alert(`加载违规数据失败: ${result.error}`);
-            return;
-        }
-
-        renderViolations(result.violations);
-        renderViolationsPagination();
-    } catch (error) {
-        alert(`加载违规数据失败: ${error.message}`);
-    }
-}
-
-// 渲染违规数据表格
-function renderViolations(violations) {
-    const tbody = document.getElementById('violationsTableBody');
-    tbody.innerHTML = '';
-
-    if (violations.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">暂无违规数据</td></tr>';
-        return;
-    }
-
-    violations.forEach(v => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${v.row_index}</td>
-            <td>${escapeHtml(v.column)}</td>
-            <td>${escapeHtml(v.value)}</td>
-            <td>${escapeHtml(v.rule_name)}</td>
-            <td><span class="severity-badge severity-${v.severity}">${getSeverityText(v.severity)}</span></td>
-        `;
-        tbody.appendChild(row);
-    });
-}
-
-// 渲染违规数据分页
-function renderViolationsPagination() {
-    const pagination = document.getElementById('violationsPagination');
-    pagination.innerHTML = '';
-
-    if (violationsTotalPages <= 1) {
-        return;
-    }
-
-    // 上一页按钮
-    const prevBtn = document.createElement('button');
-    prevBtn.textContent = '上一页';
-    prevBtn.disabled = violationsCurrentPage <= 1;
-    prevBtn.onclick = function() {
-        violationsCurrentPage--;
-        loadViolations();
-    };
-    pagination.appendChild(prevBtn);
-
-    // 页码
-    const maxVisiblePages = 7;
-    let startPage, endPage;
-
-    if (violationsTotalPages <= maxVisiblePages) {
-        startPage = 1;
-        endPage = violationsTotalPages;
-    } else {
-        if (violationsCurrentPage <= 4) {
-            startPage = 1;
-            endPage = maxVisiblePages - 2;
-        } else if (violationsCurrentPage >= violationsTotalPages - 3) {
-            startPage = violationsTotalPages - (maxVisiblePages - 3);
-            endPage = violationsTotalPages;
-        } else {
-            startPage = violationsCurrentPage - 2;
-            endPage = violationsCurrentPage + 2;
-        }
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
-        const pageBtn = document.createElement('button');
-        pageBtn.className = 'page-number';
-        pageBtn.textContent = i;
-        if (i === violationsCurrentPage) {
-            pageBtn.classList.add('active');
-        }
-        pageBtn.onclick = function() {
-            violationsCurrentPage = i;
-            loadViolations();
-        };
-        pagination.appendChild(pageBtn);
-    }
-
-    // 下一页按钮
-    const nextBtn = document.createElement('button');
-    nextBtn.textContent = '下一页';
-    nextBtn.disabled = violationsCurrentPage >= violationsTotalPages;
-    nextBtn.onclick = function() {
-        violationsCurrentPage++;
-        loadViolations();
-    };
-    pagination.appendChild(nextBtn);
-}
-
 // 获取严重程度文本
 function getSeverityText(severity) {
     const map = {
@@ -492,8 +328,13 @@ let validationTotal = 0;
 
 // 验证数据
 async function validateData() {
+    if (!sessionId) {
+        alert("请先上传文件");
+        return;
+    }
+
     try {
-        const res = await fetch(`${BASE_URL}/validate`, {
+        const res = await fetch(`${BASE_URL}/validate?session_id=${sessionId}`, {
             method: 'POST'
         });
 
@@ -523,29 +364,17 @@ function showValidationResults(result) {
             <div class="summary-label">总行数</div>
         </div>
         <div class="summary-item">
-            <div class="summary-count summary-high">${result.invalid_rows}</div>
-            <div class="summary-label">错误行数</div>
+            <div class="summary-count summary-high">${result.rejected_rows}</div>
+            <div class="summary-label">剔除行数</div>
         </div>
         <div class="summary-item">
             <div class="summary-count summary-low">${result.valid_rows}</div>
             <div class="summary-label">有效行数</div>
         </div>
-        <div class="summary-item">
-            <div class="summary-count">${result.severity_count.high}</div>
-            <div class="summary-label">高危错误</div>
-        </div>
-        <div class="summary-item">
-            <div class="summary-count">${result.severity_count.medium}</div>
-            <div class="summary-label">中危错误</div>
-        </div>
-        <div class="summary-item">
-            <div class="summary-count">${result.severity_count.low}</div>
-            <div class="summary-label">低危错误</div>
-        </div>
     `;
 
     validationCurrentPage = 1;
-    validationTotal = result.invalid_rows;
+    validationTotal = result.rejected_rows;
     validationTotalPages = Math.ceil(validationTotal / 20);
 
     loadInvalidData();
@@ -562,8 +391,13 @@ function closeValidationResults() {
 
 // 加载验证失败的数据
 async function loadInvalidData() {
+    if (!sessionId) {
+        alert("请先上传文件");
+        return;
+    }
+
     try {
-        const res = await fetch(`${BASE_URL}/invalid_data?page=${validationCurrentPage}&page_size=20`);
+        const res = await fetch(`${BASE_URL}/data?data_type=rejected&page=${validationCurrentPage}&page_size=20&session_id=${sessionId}`);
         const result = await res.json();
 
         if (result.error) {
@@ -571,7 +405,7 @@ async function loadInvalidData() {
             return;
         }
 
-        renderInvalidData(result.invalid_records);
+        renderInvalidData(result.data);
         renderValidationPagination();
     } catch (error) {
         alert(`加载验证数据失败: ${error.message}`);
@@ -589,18 +423,16 @@ function renderInvalidData(invalidRecords) {
     }
 
     invalidRecords.forEach(record => {
-        record.errors.forEach(error => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${record.row_index}</td>
-                <td>${escapeHtml(error.column)}</td>
-                <td>${escapeHtml(error.value)}</td>
-                <td>${escapeHtml(error.rule_name)}</td>
-                <td><span class="severity-badge severity-${error.severity}">${getSeverityText(error.severity)}</span></td>
-                <td>${escapeHtml(error.expected_pattern)}</td>
-            `;
-            tbody.appendChild(row);
-        });
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${record.row_index || ''}</td>
+            <td>${escapeHtml(Object.keys(record).find(key => key !== '剔除原因' && key !== 'row_index') || '')}</td>
+            <td>${escapeHtml(Object.values(record).find(value => typeof value !== 'string' || value !== '剔除原因') || '')}</td>
+            <td>${escapeHtml(record.rule_name || '')}</td>
+            <td><span class="severity-badge severity-medium">中危</span></td>
+            <td>${escapeHtml(record.剔除原因 || '')}</td>
+        `;
+        tbody.appendChild(row);
     });
 }
 
@@ -679,8 +511,13 @@ function validateColumn() {
 
 // 加载列信息
 async function loadColumns() {
+    if (!sessionId) {
+        alert("请先上传文件");
+        return;
+    }
+
     try {
-        const res = await fetch(`${BASE_URL}/data?page=1&page_size=1`);
+        const res = await fetch(`${BASE_URL}/data?page=1&page_size=1&session_id=${sessionId}`);
         const result = await res.json();
         
         if (result.error) {
@@ -709,6 +546,11 @@ function closeCustomValidation() {
 
 // 执行自定义验证
 async function runCustomValidation() {
+    if (!sessionId) {
+        alert("请先上传文件");
+        return;
+    }
+
     const columnSelect = document.getElementById('columnSelect');
     const regexPattern = document.getElementById('regexPattern');
     
@@ -721,7 +563,7 @@ async function runCustomValidation() {
     }
     
     try {
-        const res = await fetch(`${BASE_URL}/validate_column`, {
+        const res = await fetch(`${BASE_URL}/validate_column?session_id=${sessionId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -802,10 +644,13 @@ function closeCustomValidationResults() {
 
 // 处理CSV文件
 async function processCsv() {
+    if (!sessionId) {
+        alert("请先上传文件");
+        return;
+    }
+
     try {
-        const res = await fetch(`${BASE_URL}/process_csv`, {
-            method: 'POST'
-        });
+        const res = await fetch(`${BASE_URL}/download_processed?session_id=${sessionId}`);
 
         if (!res.ok) {
             const errorData = await res.json();
@@ -833,10 +678,13 @@ async function processCsv() {
 
 // 快速清洗CSV文件
 async function processCsvQuick() {
+    if (!sessionId) {
+        alert("请先上传文件");
+        return;
+    }
+
     try {
-        const res = await fetch(`${BASE_URL}/process_csv_quick`, {
-            method: 'POST'
-        });
+        const res = await fetch(`${BASE_URL}/download_processed?session_id=${sessionId}`);
 
         if (!res.ok) {
             const errorData = await res.json();
@@ -864,8 +712,13 @@ async function processCsvQuick() {
 
 // 关系验证
 async function validateRelationships() {
+    if (!sessionId) {
+        alert("请先上传文件");
+        return;
+    }
+
     try {
-        const res = await fetch(`${BASE_URL}/validate_relationships`, {
+        const res = await fetch(`${BASE_URL}/validate_relationships?session_id=${sessionId}`, {
             method: 'POST'
         });
 
@@ -946,6 +799,11 @@ let relatedColumnCount = 0;
 
 // 打开自定义关系验证对话框
 async function openRelationshipValidationModal() {
+    if (!sessionId) {
+        alert("请先上传文件");
+        return;
+    }
+
     // 加载列信息
     await loadColumnsForRelationshipValidation();
     
@@ -958,8 +816,13 @@ async function openRelationshipValidationModal() {
 
 // 加载列信息到关系验证对话框
 async function loadColumnsForRelationshipValidation() {
+    if (!sessionId) {
+        alert("请先上传文件");
+        return;
+    }
+
     try {
-        const res = await fetch(`${BASE_URL}/data?page=1&page_size=1`);
+        const res = await fetch(`${BASE_URL}/data?page=1&page_size=1&session_id=${sessionId}`);
         const result = await res.json();
         
         if (result.error) {
@@ -1078,6 +941,11 @@ function removeRelatedColumn(button) {
 
 // 保存关系验证规则
 async function saveRelationshipRule() {
+    if (!sessionId) {
+        alert("请先上传文件");
+        return;
+    }
+
     const ruleId = document.getElementById('ruleId').value.trim();
     const ruleName = document.getElementById('ruleName').value.trim();
     const ruleDescription = document.getElementById('ruleDescription').value.trim();

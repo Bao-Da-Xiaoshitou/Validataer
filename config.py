@@ -18,78 +18,12 @@ os.makedirs(RULES_DIR, exist_ok=True)
 
 # 规则文件配置
 RULES_CONFIG = {
-    "dlp_rules_file": os.path.join(RULES_DIR, "dlp_rules.json"),
     "validation_rules_file": os.path.join(RULES_DIR, "validation_rules.json"),
     "relationship_rules_file": os.path.join(RULES_DIR, "relationship_rules.json")
 }
 
 # 默认规则配置
 DEFAULT_RULES = {
-    "dlp_rules": [
-        {
-            'rule_id': 'phone_cn',
-            'name': '中国手机号',
-            'description': '检测中国大陆手机号码',
-            'pattern': r'1[3-9]\d{9}',
-            'rule_type': 'regex',
-            'severity': 'medium',
-            'enabled': True
-        },
-        {
-            'rule_id': 'id_card_cn',
-            'name': '中国身份证号',
-            'description': '检测中国身份证号码',
-            'pattern': r'\d{17}[\dXx]',
-            'rule_type': 'regex',
-            'severity': 'high',
-            'enabled': True
-        },
-        {
-            'rule_id': 'email',
-            'name': '邮箱地址',
-            'description': '检测邮箱地址',
-            'pattern': r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-            'rule_type': 'regex',
-            'severity': 'low',
-            'enabled': True
-        },
-        {
-            'rule_id': 'credit_card',
-            'name': '信用卡号',
-            'description': '检测信用卡号',
-            'pattern': r'\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11}|6(?:011|5[0-9]{2})[0-9]{12})\b',
-            'rule_type': 'regex',
-            'severity': 'high',
-            'enabled': True
-        },
-        {
-            'rule_id': 'ip_address',
-            'name': 'IP地址',
-            'description': '检测IP地址',
-            'pattern': r'\b(?:\d{1,3}\.){3}\d{1,3}\b',
-            'rule_type': 'regex',
-            'severity': 'low',
-            'enabled': True
-        },
-        {
-            'rule_id': 'bank_card',
-            'name': '银行卡号',
-            'description': '检测银行卡号（16-19位数字）',
-            'pattern': r'\b\d{16,19}\b',
-            'rule_type': 'regex',
-            'severity': 'high',
-            'enabled': True
-        },
-        {
-            'rule_id': 'password',
-            'name': '密码字段',
-            'description': '检测密码相关字段',
-            'pattern': r'password|pwd|passwd',
-            'rule_type': 'regex',
-            'severity': 'high',
-            'enabled': True
-        }
-    ],
     "validation_rules": [
         {
             'rule_id': 'phone_cn',

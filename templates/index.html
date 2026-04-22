@@ -22,7 +22,6 @@
     <div class="data-info">
         <div class="left-actions">
             <button onclick="resetUpload()" class="reupload-btn">重新上传</button>
-            <button onclick="scanData()" class="scan-btn">DLP扫描</button>
             <button onclick="validateData()" class="validate-btn">数据验证</button>
             <button onclick="validateRelationships()" class="relationship-btn">关系校验</button>
             <button onclick="openRelationshipValidationModal()" class="custom-relationship-btn">自定义关系验证</button>
@@ -33,32 +32,6 @@
             <a href="/relationship_rules_page" class="rules-link">关系规则管理</a>
         </div>
         <span id="dataStats">共 0 行 / 0 列</span>
-    </div>
-
-    <!-- DLP扫描结果 -->
-    <div class="scan-results" id="scanResults" style="display: none;">
-        <div class="scan-content">
-            <div class="scan-header">
-                <h3>DLP扫描结果</h3>
-                <button onclick="closeScanResults()" class="close-btn">关闭</button>
-            </div>
-            <div class="scan-summary" id="scanSummary"></div>
-            <div class="violations-table-container">
-                <table id="violationsTable">
-                    <thead>
-                        <tr>
-                            <th>行号</th>
-                            <th>列名</th>
-                            <th>值</th>
-                            <th>规则</th>
-                            <th>严重程度</th>
-                        </tr>
-                    </thead>
-                    <tbody id="violationsTableBody"></tbody>
-                </table>
-            </div>
-            <div class="pagination" id="violationsPagination"></div>
-        </div>
     </div>
 
     <!-- 数据验证结果 -->
